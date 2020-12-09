@@ -67,7 +67,8 @@ pub fn chmod(file: &str, mode: u32) {
 pub fn init_magisk() {
     // Overwrite init.superuser.rc
     let superuser_config = "/init.superuser.rc";
-    let superuser_data = "# su daemon
+    let superuser_data = "
+# su daemon
 service su_daemon /sbin/magisk --daemon
     seclabel u:r:su:s0
     oneshot
@@ -82,7 +83,15 @@ on property:persist.sys.root_access=1
     start su_daemon
 
 on property:persist.sys.root_access=3
-    start su_daemon";
+    start su_daemon
+
+on post-fs-data
+    exec u:r:su:s0 -- /sbin/magisk --post-fs-data
+
+on property:sys.boot_completed=1
+    exec u:r:su:s0 -- /sbin/magisk --service
+    exec u:r:su:s0 -- /sbin/magisk --boot-complete
+";
 
     match fs::write(superuser_config, superuser_data) {
         Ok(_) => {
