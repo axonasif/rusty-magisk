@@ -1,0 +1,13 @@
+[package]
+name = "rusgik"
+version = "0.1.0"
+authors = ["AXON <aminurfisa3@gmail.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+nix = "0.19.1"
+execute = "0.2.8"
+clap = "2.33.3"
+sys-mount = "1.2.1"
