@@ -7,3 +7,4 @@ So, kindly ignore as long I'm a noob LoL
 # To-do:
 * Add build details in README.md
 * Completing this project (Means testing it ... the hard part of all)
+* Once after these, release pre-built binaries for ease of use

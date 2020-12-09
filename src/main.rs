@@ -214,5 +214,5 @@ pub fn job() {
 }
 
 fn main() {
-    println!("lol");
+    job();
 }
