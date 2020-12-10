@@ -37,6 +37,7 @@ cargo build --release --target i686-unknown-linux-musl    # For 32bit
 ```
 
 > Then you should find the output as `target/x86_64-unknown-linux-musl/release/rusgik`
+>
 > I recommend to `strip` the binary for reducing the size.
 
 
@@ -67,4 +68,5 @@ rsync rusgik ramdisk/init && chmod 777 ramdisk/init && ( cd ramdisk && find . | 
 
 ### Note
 > I'm assuming that you have `rusgik` binary at the same dir as your android-x86 OS files.
+>
 > Quick-tip: You can also get pre-built `rusgik` binaries at https://github.com/AXIM0S/rusgik/releases
