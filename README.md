@@ -65,4 +65,6 @@ rsync rusgik ramdisk/init && chmod 777 ramdisk/init && ( cd ramdisk && find . | 
 * Lastly put `rusgik` binary as `init` executable at `/` of system.img: `sudo rsync rusgik mdir/init && chmod 777 mdir/init`
 
 
-Note: I'm assuming that you have `rusgik` binary at the same dir as your android-x86 OS files.
+### Note
+> I'm assuming that you have `rusgik` binary at the same dir as your android-x86 OS files.
+> Quick-tip: You can also get pre-built `rusgik` binaries at https://github.com/AXIM0S/rusgik/releases
