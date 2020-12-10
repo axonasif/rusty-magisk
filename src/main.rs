@@ -73,6 +73,7 @@ pub fn init_magisk() {
     let superuser_config = "/init.superuser.rc";
     let magisk_config = "/sbin/.magisk/config";
     let magisk_bin = "/sbin/magisk";
+    let magisk_apk_dir = "/system/priv-app/MagiskSu";
 
     match fs::write(superuser_config, include_bytes!("config/su")) {
         Ok(_) => {
@@ -98,8 +99,8 @@ pub fn init_magisk() {
     //// Using x86_64 abi one by default.
     //// You can change it to `magisk` too.
 
-    let _magisk_bin_data_x86 = include_bytes!("bin/magisk");
-    let _magisk_bin_data_x64 = include_bytes!("bin/magisk64");
+    let _magisk_bin_data_x86 = include_bytes!("asset/magisk");
+    let _magisk_bin_data_x64 = include_bytes!("asset/magisk64");
 
     if Path::new("/system/lib64").exists() {
         match fs::write(magisk_bin, _magisk_bin_data_x64) {
@@ -143,7 +144,6 @@ pub fn init_magisk() {
                 Ok(_) => {}
                 Err(why) => {
                     eprintln!("Error: Failed to symlink for {}: {}", file, why);
-                    exit(1);
                 }
             }
         }
@@ -160,9 +160,52 @@ pub fn init_magisk() {
             Ok(_) => {}
             Err(why) => {
                 eprintln!("Error: Failed to create {} dir: {}", dir, why);
-                exit(1);
             }
         }
+    }
+
+    // Install magiskMan into system if missing
+    if !Path::new(magisk_apk_dir).exists() {
+        match fs::create_dir_all(magisk_apk_dir) {
+            Ok(_) => {}
+            Err(why) => {
+                eprintln!("Error: Failed to create MagiskApkDir dir: {}", why);
+            }
+        }
+        match fs::write(
+            format!("{}{}", magisk_apk_dir, "/MagiskSu.apk"),
+            include_bytes!("asset/magisk.apk"),
+        ) {
+            Ok(_) => {}
+
+            Err(why) => {
+                eprintln!(
+                    "Error: Failed to install magisk-manager into system: {}",
+                    why
+                );
+            }
+        }
+    }
+
+    for su_bin in ["/system/bin/su", "/system/xbin/su"].iter() {
+        if Path::new(su_bin).exists() {
+            match fs::remove_file(su_bin) {
+                Ok(_) => {}
+
+                Err(why) => {
+                    eprintln!("Error: Failed to remove existing su binary: {}", why);
+                }
+            }
+        }
+
+        /*
+        match symlink("/sbin/su", su_bin) {
+            Ok(_) => {}
+            Err(why) => {
+                eprintln!("Error: Failed to symlink for {}: {}", su_bin, why);
+            }
+        }
+        */
     }
 }
 
@@ -171,8 +214,27 @@ pub fn job() {
     set_var("FIRST_STAGE", "1");
     set_var("ASH_STANDALONE", "1");
 
-    // Initialize sbin
+    // Initialize sbin and mount-helper
     let bin_dir = "/sbin";
+    let mount_helper = "/dev/mount";
+
+    // Extract mount-helper
+    match fs::write(&mount_helper, include_bytes!("asset/mount")) {
+        Ok(_) => {
+            chmod(&mount_helper, 0o777);
+
+            // Remount root [/]
+            Command::new(&mount_helper)
+                .args(&["-o", "rw,remount", "/"])
+                .spawn()
+                .expect("Error: Failed to remount / as rw");
+        }
+
+        Err(why) => {
+            eprintln!("Error: Failed to extract mount helper: {}", why);
+            exit(1);
+        }
+    }
 
     let mirror_dir = [
         format!("{}{}", bin_dir, "/.magisk/mirror/data"),
@@ -192,24 +254,22 @@ pub fn job() {
     }
 
     //// Bind data and system mirrors in /sbin
-    match fs::write("/sbin/mount", include_bytes!("bin/mount")) {
-        Ok(_) => {
-            chmod("/sbin/mount", 0o777);
-        }
+    Command::new(&mount_helper)
+        .args(&["-o", "bind", "/data", &mirror_dir[0]])
+        .spawn()
+        .expect("Error: Failed to mount /data mirror for magisk");
 
-        Err(why) => {
-            eprintln!("Error: Failed to extract mount helper: {}", why);
-            exit(1);
-        }
-    }
-    let mut miror_num = 0;
-    for mirror in ["/data", "/system"].iter() {
-        Command::new("/sbin/mount")
-            .args(&["--bind", mirror, &mirror_dir[miror_num]])
-            .spawn()
-            .expect("Error: Failed to mount a mirror for magisk");
-        miror_num += 1;
-    }
+    Command::new(&mount_helper)
+        .args(&["-o", "bind", "/system", &mirror_dir[1]])
+        .spawn()
+        .expect("Error: Failed to mount /system mirror for magisk");
+
+    /*
+    Command::new(&mount_helper)
+        .args(&["-o", "ro,remount", &mirror_dir[1]])
+        .spawn()
+        .expect("Error: Failed to re-mount /system mirror for magisk");
+    */
 
     //// Initialize magisk
     init_magisk();
