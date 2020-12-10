@@ -60,6 +60,9 @@ rsync rusgik ramdisk/init && chmod 777 ramdisk/init && ( cd ramdisk && find . | 
 
 * Once you have `system.img` you need to mount it: `mkdir mdir && sudo mount -o loop system.img mdir`
 
-* Now rename `init` to `init.real` by running the following command: `sudo mv init init.real`
+* Now rename `init` to `init.real` by running the following command: `sudo mv mdir/init mdir/init.real`
 
 * Lastly put `rusgik` binary as `init` executable at `/` of system.img: `sudo rsync rusgik mdir/init && chmod 777 mdir/init`
+
+
+Note: I'm assuming that you have `rusgik` binary at the same dir as your android-x86 OS files.
