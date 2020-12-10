@@ -12,13 +12,13 @@ So, kindly ignore as long I'm a noob LoL
 
 # Build instructions
 
-* First of all you need rust. Follow the link below and you should know what to do.
+* First of all you need rust. Follow the link below and you will know what to do.
 
 > It'll also autoinstall rustc and cargo for you.
 
 > https://www.rust-lang.org/tools/install
 
-* Once you have rustt and everything it brings, we add a new target. Run the following command:
+* Once you have rust and everything it brings, we add a new target. Run the following command:
 
 ```bash
 rustup target add x86_64-unknown-linux-musl
@@ -29,16 +29,14 @@ rustup target add x86_64-unknown-linux-musl
 * After you have the build targets installed simply run the following command:
 
 ```bash
-cargo build --release --target x86_64-unknown-linux-musl  # For 64bit
+RUSTFLAGS='-C link-arg=-s' cargo build --release --target x86_64-unknown-linux-musl  # For 64bit
 
 # or
 
-cargo build --release --target i686-unknown-linux-musl    # For 32bit
+RUSTFLAGS='-C link-arg=-s' cargo build --release --target i686-unknown-linux-musl    # For 32bit
 ```
 
-> Then you should find the output as `target/x86_64-unknown-linux-musl/release/rusgik`
->
-> I recommend to `strip` the binary for reducing the size.
+> Then you should find the output as `target/x86_64-unknown-linux-musl/release/rusgik` (64bit)
 
 
 # Installation
