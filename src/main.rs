@@ -80,15 +80,17 @@ pub fn extract_file(extern_file: &str, intern_file: &'static [u8], extern_mode: 
     }
 }
 
-pub fn remountfs(mount_point: &str, mount_prog: &str) {
+pub fn mount(my_args: &[&str]) {
+    let mount_prog = "/dev/mount";
+
     if !Path::new(mount_prog).exists() {
         extract_file(mount_prog, include_bytes!("asset/mount"), 0o777)
     }
 
     Command::new(mount_prog)
-        .args(&["-o", "rw,remount", mount_point])
+        .args(my_args)
         .spawn()
-        .expect(&format!("Failed to remount {} as r/w", mount_point));
+        .expect("Error: ");
 }
 
 pub fn job() {
@@ -97,16 +99,45 @@ pub fn job() {
     set_var("ASH_STANDALONE", "1");
 
     // Initialize vars
-    let bin_dir = "/sbin";
-    let mount_helper = "/dev/mount";
+    let init_real = "/init.real";
+    let bin_dir = if Path::new("/sbin").exists() {
+        "/sbin"
+    } else {
+        "/system/bin"
+    };
+
     let superuser_config = "/init.superuser.rc";
     let magisk_config = &format!("{}{}", bin_dir, "/.magisk/config");
-    let magisk_bin = &format!("{}{}", bin_dir, "/magisk");
+
     let magisk_apk_dir = "/system/priv-app/MagiskSu";
+    let magisk_bin = &format!("{}{}", bin_dir, "/magisk");
+
+    let _magisk_bin_data_x86 = include_bytes!("asset/magisk");
+    let _magisk_bin_data_x64 = include_bytes!("asset/magisk64");
+    let magisk_bin_data: &'static [u8] = if Path::new("/system/lib64").exists() {
+        _magisk_bin_data_x64
+    } else {
+        _magisk_bin_data_x86
+    };
 
     //// Initialize bin_dir
-    // Remount / as rw
-    remountfs("/", mount_helper);
+    if bin_dir != "/sbin" {
+        for dir in ["/dev/magisk/upper", "/dev/magisk/work"].iter() {
+            fs::create_dir_all(dir).expect("Error: Failed to setup bin_dir at /dev");
+            extract_file("/dev/magisk_bin", magisk_bin_data, 0o755);
+            Command::new("/dev/magisk_bin").args(&[
+                "--clone-attr",
+                "/system/bin",
+                "/dev/magisk/upper",
+            ]);
+        }
+    } else {
+        // Remount required mountpoints as rw
+        mount(&[&"-o", "remount,rw", "/"]);
+        if Path::new(bin_dir).exists() {
+            mount(&[&"-o", "remount,rw", bin_dir]);
+        }
+    }
 
     // Create required dirs in bin_dir
     let mirror_dir = [
@@ -121,27 +152,18 @@ pub fn job() {
     }
 
     //// Bind data and system mirrors in bin_dir
-    Command::new(&mount_helper)
-        .args(&["-o", "bind", "/data", &mirror_dir[0]])
-        .spawn()
-        .expect("Error: Failed to mount /data mirror for magisk");
+    let mut mirror_count = 1;
+    for mirror_source in ["/data", "/system"].iter() {
+        mount(&[&"-o", "bind", mirror_source, &mirror_dir[mirror_count]]);
+        mirror_count += 1;
+    }
 
-    Command::new(&mount_helper)
-        .args(&["-o", "bind", "/system", &mirror_dir[1]])
-        .spawn()
-        .expect("Error: Failed to mount /system mirror for magisk");
+    // Double remount bin_dir
+    mount(&[&"-o", "remount,rw", bin_dir]);
 
     ///////////////////////////
     //// Initialize magisk ////
     // Extract magisk and set it up
-    let _magisk_bin_data_x86 = include_bytes!("asset/magisk");
-    let _magisk_bin_data_x64 = include_bytes!("asset/magisk64");
-
-    let magisk_bin_data: &'static [u8] = if Path::new("/system/lib64").exists() {
-        _magisk_bin_data_x64
-    } else {
-        _magisk_bin_data_x86
-    };
 
     extract_file(superuser_config, include_bytes!("config/su"), 0o755);
     extract_file(magisk_config, include_bytes!("config/magisk"), 0o755);
@@ -212,41 +234,7 @@ pub fn job() {
         */
     }
 
-    /*
-    // Now let's deal with selinux if needed
-    if Path::new("/sys/fs/selinux").exists() {
-        // Fix se-context
-        run_externc(
-            "/system/bin/chcon",
-            "u:object_r:rootfs:s0",
-            "/sbin",
-            "",
-            "Error: Failed to change se-context of /sbin",
-        );
-
-        // Execute magiskpolicy
-        if !Path::new("/sbin/magiskpolicy").exists() {
-            match symlink("/sbin/magisk", "/sbin/magiskpolicy") {
-                Ok(_) => {}
-                Err(why) => {
-                    eprintln!("Error: Failed to symlink for magiskpolicy: {}", why);
-                    exit(1);
-                }
-            }
-
-            run_externc(
-                "/sbin/magiskpolicy",
-                "--live",
-                "--magisk",
-                "",
-                "Error: Failed to execute magiskpolicy",
-            );
-        }
-    }
-    */
-
     //// Swtitch process to OS init.
-    let init_real = "/init.real";
     if Path::new(init_real).exists() {
         executev(&[init_real]);
     }
