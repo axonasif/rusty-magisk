@@ -36,22 +36,22 @@ RUSTFLAGS='-C link-arg=-s' cargo build --release --target x86_64-unknown-linux-m
 RUSTFLAGS='-C link-arg=-s' cargo build --release --target i686-unknown-linux-musl    # For 32bit
 ```
 
-> Then you should find the output as `target/x86_64-unknown-linux-musl/release/rusgik` (64bit)
+> Then you should find the output as `target/x86_64-unknown-linux-musl/release/rusty-magisk` (64bit)
 
 
 # Installation
 
 ## For Android-9 and below
 
-* Copy your `ramdisk.img` and the `rusgik` binary in an ext4 partition directory and run the following commands:
+* Copy your `ramdisk.img` and the `rusty-magisk` binary in an ext4 partition directory and run the following commands:
 
 ```bash
 su
 mkdir ramdisk && ( cd ramdisk && zcat ../ramdisk.img | cpio -iud && mv init init.real )
-rsync rusgik ramdisk/init && chmod 777 ramdisk/init && ( cd ramdisk && find . | cpio -o -H newc | gzip > ../ramdisk.img )
+rsync rusty-magisk ramdisk/init && chmod 777 ramdisk/init && ( cd ramdisk && find . | cpio -o -H newc | gzip > ../ramdisk.img )
 ```
 
-> Tl;dr: In short, you need to rename `init` executable to `init.real` and put `rusgik` as `init` inside your `ramdisk.img`.
+> Tl;dr: In short, you need to rename `init` executable to `init.real` and put `rusty-magisk` as `init` inside your `ramdisk.img`.
 
 ## For Android-10 and above
 
@@ -61,10 +61,10 @@ rsync rusgik ramdisk/init && chmod 777 ramdisk/init && ( cd ramdisk && find . | 
 
 * Now rename `init` to `init.real` by running the following command: `sudo mv mdir/init mdir/init.real`
 
-* Lastly put `rusgik` binary as `init` executable at `/` of system.img: `sudo rsync rusgik mdir/init && chmod 777 mdir/init`
+* Lastly put `rusty-magisk` binary as `init` executable at `/` of system.img: `sudo rsync rusty-magisk mdir/init && chmod 777 mdir/init`
 
 
 ### Note
-> I'm assuming that you have `rusgik` binary at the same dir as your android-x86 OS files.
+> I'm assuming that you have `rusty-magisk` binary at the same dir as your android-x86 OS files.
 >
-> Quick-tip: You can also get pre-built `rusgik` binaries at https://github.com/AXIM0S/rusgik/releases
+> Quick-tip: You can also get pre-built `rusty-magisk` binaries at https://github.com/AXIM0S/rusty-magisk/releases
