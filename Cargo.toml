@@ -1,5 +1,5 @@
 [package]
-name = "rusgik"
+name = "rusty-magisk"
 version = "0.1.1"
 authors = ["AXON <aminurfisa3@gmail.com>"]
 edition = "2018"
