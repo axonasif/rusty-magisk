@@ -38,11 +38,10 @@ pub fn job() {
         for dir in ["/dev/magisk/upper", "/dev/magisk/work"].iter() {
             fs::create_dir_all(dir).expect("Error: Failed to setup bin_dir at /dev");
             extract_file("/dev/magisk_bin", magisk_bin_data, 0o755);
-            Command::new("/dev/magisk_bin").args(&[
-                "--clone-attr",
-                "/system/bin",
-                "/dev/magisk/upper",
-            ]);
+            Command::new("/dev/magisk_bin")
+                .args(&["--clone-attr", "/system/bin", "/dev/magisk/upper"])
+                .spawn()
+                .expect("Error: Failed to clone attrs at /dev/magisk/upper");
         }
     } else {
         // Remount required mountpoints as rw
