@@ -1,10 +1,10 @@
 use std::env::set_var;
 use std::fs;
 use std::os::unix::fs::symlink;
-use std::path::Path; // For working with files
-use std::process::Command;
+use std::path::{Path, PathBuf};
+use sys_mount::{unmount, Mount, MountFlags, UnmountFlags};
 mod utils;
-use utils::{executev, extract_file, mount};
+use utils::{extract_file, remount_root, switch_init};
 
 pub fn job() {
     // Export some possibly required env vars for magisk
@@ -12,12 +12,7 @@ pub fn job() {
     set_var("ASH_STANDALONE", "1");
 
     // Initialize vars
-    let init_real = "/init.real";
-    let bin_dir = if Path::new("/sbin").exists() {
-        "/sbin"
-    } else {
-        "/system/bin"
-    };
+    let bin_dir = "/sbin";
 
     let superuser_config = "/init.superuser.rc";
     let magisk_config = &format!("{}{}", bin_dir, "/.magisk/config");
@@ -34,49 +29,112 @@ pub fn job() {
     };
 
     //// Initialize bin_dir
-    if bin_dir != "/sbin" {
-        for dir in ["/dev/magisk/upper", "/dev/magisk/work"].iter() {
-            fs::create_dir_all(dir).expect("Error: Failed to setup bin_dir at /dev");
-            extract_file("/dev/magisk_bin", magisk_bin_data, 0o755);
-            Command::new("/dev/magisk_bin")
-                .args(&["--clone-attr", "/system/bin", "/dev/magisk/upper"])
-                .spawn()
-                .expect("Error: Failed to clone attrs at /dev/magisk/upper");
+    if Path::new(bin_dir).exists() {
+        // When empty
+        if PathBuf::from(bin_dir)
+            .read_dir()
+            .map(|mut i| i.next().is_none())
+            .unwrap_or(false)
+        {
+            match Mount::new(bin_dir, bin_dir, "tmpfs", MountFlags::empty(), None) {
+                Ok(_) => {}
+                Err(why) => {
+                    println!(
+                        "rusty-magisk: Failed to setup tmpfs at {}: {}",
+                        bin_dir, why
+                    );
+                    switch_init();
+                }
+            }
+        } else {
+            // When not empty
+            remount_root();
+            match fs::write(format!("{}/{}", bin_dir, ".rwfs"), "") {
+                Ok(_) => match fs::remove_file(format!("{}/{}", bin_dir, ".rwfs")) {
+                    Ok(_) => {}
+                    Err(_) => {}
+                },
+                Err(why) => {
+                    println!("rusty-magisk: {} is not writable: {}", bin_dir, why);
+                    switch_init();
+                }
+            }
         }
     } else {
-        // Remount required mountpoints as rw
-        mount(&[&"-o", "remount,rw", "/"]);
-        if Path::new(bin_dir).exists() {
-            mount(&[&"-o", "remount,rw", bin_dir]);
+        match fs::create_dir(bin_dir) {
+            Ok(_) => match Mount::new(bin_dir, bin_dir, "tmpfs", MountFlags::empty(), None) {
+                Ok(_) => {}
+                Err(why) => {
+                    println!(
+                        "rusty-magisk: Failed to setup tmpfs at {}: {}",
+                        bin_dir, why
+                    );
+                    switch_init();
+                }
+            },
+            Err(why) => {
+                println!(
+                    "rusty-magisk: Root(/) is not writable, failed to initialize {}: {}",
+                    bin_dir, why
+                );
+                switch_init();
+            }
+        }
+    }
+
+    // Initialize procfs
+    if !Path::new("/proc/cpuinfo").exists() {
+        match Mount::new("/proc", "/proc", "proc", MountFlags::empty(), None) {
+            Ok(_) => {}
+            Err(_) => {
+                println!("rusty-magisk: Failed to initialize procfs");
+                switch_init();
+            }
         }
     }
 
     // Create required dirs in bin_dir
     let mirror_dir = [
+        format!("{}{}", bin_dir, "/.magisk/modules"),
         format!("{}{}", bin_dir, "/.magisk/mirror/data"),
         format!("{}{}", bin_dir, "/.magisk/mirror/system"),
-        format!("{}{}", bin_dir, "/.magisk/modules"),
-        // format!("{}{}", bin_dir, "/.magisk/block"),
     ];
 
     for dir in mirror_dir.iter() {
-        fs::create_dir_all(dir).expect(&format!("Failed to create {} dir", dir));
+        match fs::create_dir_all(dir) {
+            Ok(_) => {}
+            Err(why) => {
+                println!("rusty-magisk: Failed to create {} dir: {}", dir, why);
+            }
+        }
     }
 
     //// Bind data and system mirrors in bin_dir
-    let mut mirror_count = 1;
-    for mirror_source in ["/data", "/system"].iter() {
-        mount(&[&"-o", "bind", mirror_source, &mirror_dir[mirror_count]]);
-        mirror_count += 1;
-    }
+    let mut mirror_count = 2;
 
-    // Double remount bin_dir
-    mount(&[&"-o", "remount,rw", bin_dir]);
+    for mirror_source in ["/system", "/data"].iter() {
+        match Mount::new(
+            mirror_source,
+            &mirror_dir[mirror_count],
+            "",
+            MountFlags::BIND,
+            None,
+        ) {
+            Ok(_) => {}
+            Err(why) => {
+                eprintln!(
+                    "rusty-magisk: Failed to bind mount {} into {}: {}",
+                    mirror_source, &mirror_dir[mirror_count], why
+                );
+            }
+        }
+        mirror_count -= 1;
+    }
 
     ///////////////////////////
     //// Initialize magisk ////
     // Extract magisk and set it up
-
+    remount_root();
     extract_file(superuser_config, include_bytes!("config/su"), 0o755);
     extract_file(magisk_config, include_bytes!("config/magisk"), 0o755);
     extract_file(magisk_bin, magisk_bin_data, 0o755);
@@ -87,7 +145,11 @@ pub fn job() {
             match symlink(magisk_bin, format!("{}/{}", bin_dir, file)) {
                 Ok(_) => {}
                 Err(why) => {
-                    eprintln!("Error: Failed to symlink for {}: {}", file, why);
+                    println!(
+                        "rusty-magisk: Failed to create symlink for {}: {}",
+                        file, why
+                    );
+                    switch_init();
                 }
             }
         }
@@ -103,7 +165,7 @@ pub fn job() {
         match fs::create_dir_all(dir) {
             Ok(_) => {}
             Err(why) => {
-                eprintln!("Error: Failed to create {} dir: {}", dir, why);
+                println!("rusty-magisk: Failed to create {} dir: {}", dir, why);
             }
         }
     }
@@ -117,39 +179,25 @@ pub fn job() {
                 0o644,
             ),
             Err(why) => {
-                eprintln!("Error: Failed to create MagiskApkDir dir: {}", why);
+                println!("rusty-magisk: Failed to create MagiskApkDir dir: {}", why);
             }
         }
-    }
-
-    for su_bin in ["/system/bin/su", "/system/xbin/su"].iter() {
-        if Path::new(su_bin).exists() {
-            match fs::remove_file(su_bin) {
-                Ok(_) => {}
-
-                Err(why) => {
-                    eprintln!(
-                        "Error: Failed to remove existing {} binary: {}",
-                        su_bin, why
-                    );
-                }
-            }
-        }
-
-        /*
-        match symlink("/sbin/su", su_bin) {
-            Ok(_) => {}
-            Err(why) => {
-                eprintln!("Error: Failed to symlink for {}: {}", su_bin, why);
-            }
-        }
-        */
     }
 
     //// Swtitch process to OS init.
-    if Path::new(init_real).exists() {
-        executev(&[init_real]);
+    // Unmount our /proc to ensure real android init doesn't panic
+    match unmount("/proc", UnmountFlags::DETACH) {
+        Ok(_) => {}
+        Err(why) => {
+            println!(
+                "rusty-magisk: Failed to detach /proc, trying to switch init anyway: {}",
+                why
+            );
+        }
     }
+    switch_init();
 }
 
-fn main() {}
+fn main() {
+    job();
+}
