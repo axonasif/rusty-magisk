@@ -1,16 +1,38 @@
-use nix::unistd;
-use std::ffi::CString;
-use std::fs;
-use std::os::unix::fs::PermissionsExt;
-use std::path::Path;
-use sys_mount::{Mount, MountFlags};
+use likemod::errors;
+use std::{
+    fs,
+    os::unix::{fs::PermissionsExt, process::CommandExt},
+    path::{Path, PathBuf},
+    process::Command,
+    thread, time,
+};
+use sys_mount::{unmount, Mount, MountFlags, UnmountFlags};
 
-pub fn executev(args: &[&str]) {
-    let args: Vec<CString> = args
-        .iter()
-        .map(|t| CString::new(*t).expect("rusty-magisk: Not a proper CString"))
-        .collect();
-    unistd::execv(&args[0], &args).expect("rusty-magisk: Failed to complete executev() call");
+pub struct KernelFsMount();
+impl KernelFsMount {
+    pub fn proc() {
+        if !Path::new("/proc/cpuinfo").exists() {
+            match Mount::new("/proc", "/proc", "proc", MountFlags::empty(), None) {
+                Ok(_) => {}
+                Err(_) => {
+                    println!("rusty-magisk: Failed to initialize procfs");
+                    switch_init();
+                }
+            }
+        }
+    }
+
+    pub fn dev() {
+        if dir_is_empty("/dev") {
+            match Mount::new("/dev", "/dev", "tmpfs", MountFlags::empty(), None) {
+                Ok(_) => {}
+                Err(_) => {
+                    println!("rusty-magisk: Failed to setup devfs for overlay");
+                    switch_init();
+                }
+            }
+        }
+    }
 }
 
 pub fn chmod(file: &str, mode: u32) {
@@ -44,48 +66,65 @@ pub fn extract_file(extern_file: &str, intern_file: &'static [u8], extern_mode: 
 pub fn switch_init() {
     let init_real = "/init.real";
     if Path::new(init_real).exists() {
-        executev(&[init_real]);
+        // Unmount our /proc and /dev to ensure real android init doesn't panic
+        for fs in ["/dev", "/proc"].iter() {
+            // Verify fs in not empty before unmounting
+            if !dir_is_empty(fs) {
+                match unmount(fs, UnmountFlags::DETACH) {
+                    Ok(_) => {}
+                    Err(why) => {
+                        println!(
+                            "rusty-magisk: Failed to detach {}, trying to switch init anyway: {}",
+                            fs, why
+                        );
+                    }
+                }
+            }
+        }
+        Command::new(init_real).exec();
+    } else {
+        println!("rusty-magisk: No init executable found to switch to ... im gonna panniccccc!!!");
+        thread::sleep(time::Duration::from_secs(5));
+        panic!("Once upon a time there lived ...");
     }
 }
 
 pub fn remount_root() {
-    match Mount::new("/", "/", "", MountFlags::REMOUNT, None) {
-        Ok(_) => {}
-        Err(_) => {}
+    if let Ok(_) = Mount::new("/", "/", "", MountFlags::REMOUNT, None) {}
+}
+
+pub fn dir_is_empty(dir: &str) -> bool {
+    if Path::new(dir).exists()
+        && PathBuf::from(dir)
+            .read_dir()
+            .map(|mut i| i.next().is_none())
+            .unwrap_or(false)
+    {
+        true
+    } else {
+        false
     }
 }
 
-////// Some unused functions below
+pub fn load_modfile(modpath: &str) -> errors::Result<()> {
+    // Get a file descriptor to the kernel module object.
+    let fmod = std::fs::File::open(Path::new(modpath))?;
 
-/*
+    // Assemble module parameters for loading.
+    let mut params = likemod::ModParams::new();
+    params.insert("bus_delay".to_string(), likemod::ModParamValue::Int(5));
+
+    // Try to load the module.
+    let loader = likemod::ModLoader::default().set_parameters(params);
+    loader.load_module_file(&fmod)
+}
+
 pub fn clone_perms(source: &str, target: &str) -> std::io::Result<()> {
     let perms = fs::metadata(source)?.permissions();
     fs::set_permissions(target, perms)?;
     Ok(())
 }
 
-// OverlayFS really cant be mounted once first initrd does either chroot/switch_root into `/android`
-// I've wasted many hours over this and had to finally ditch the idea :(
-pub fn create_overlay() {
-    // Transform /system/bin into overlayFS mountpoint
-    for dir in ["/dev/upper", "/dev/work"].iter() {
-        fs::create_dir_all(dir).expect("rusty-magisk: Failed to setup bin_dir at /dev");
-    }
-
-    clone_perms("/system/bin", "/dev/upper").expect("Failed to clone /android perms");
-
-    libmount::Overlay::writable(
-        ["/system/bin"].iter().map(|x| x.as_ref()),
-        "/dev/upper",
-        "/dev/work",
-        "/system/bin",
-    )
-    .mount()
-    .expect("rusty-magisk: Failed to setup overlayFS at /system/bin");
-}
-*/
-
-/*
 pub fn wipe_old_su() {
     for su_bin in ["/system/bin/su", "/system/xbin/su"].iter() {
         if Path::new(su_bin).exists() {
@@ -111,6 +150,20 @@ pub fn wipe_old_su() {
         */
     }
 }
+
+////// Some unused rusty functions below
+
+/*
+
+pub fn sbin_mode() -> bool {
+    if env::var("ANDROID_BOOTLOGO").is_err() {
+        true
+    } else {
+        false
+    }
+}
+
+
 */
 
 /* My noobish deprecieated mount function
