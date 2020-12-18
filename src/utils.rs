@@ -14,8 +14,8 @@ impl KernelFsMount {
         if !Path::new("/proc/cpuinfo").exists() {
             match Mount::new("/proc", "/proc", "proc", MountFlags::empty(), None) {
                 Ok(_) => {}
-                Err(_) => {
-                    println!("rusty-magisk: Failed to initialize procfs");
+                Err(why) => {
+                    println!("rusty-magisk: Failed to initialize procfs: {}", why);
                     switch_init();
                 }
             }
@@ -26,8 +26,8 @@ impl KernelFsMount {
         if dir_is_empty("/dev") {
             match Mount::new("/dev", "/dev", "tmpfs", MountFlags::empty(), None) {
                 Ok(_) => {}
-                Err(_) => {
-                    println!("rusty-magisk: Failed to setup devfs for overlay");
+                Err(why) => {
+                    println!("rusty-magisk: Failed to setup devfs for overlay: {}", why);
                     switch_init();
                 }
             }

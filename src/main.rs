@@ -114,7 +114,9 @@ pub fn job() {
             }
 
             // Setup overlayfs
-            clone_perms("/system/bin", "/dev/upper").expect("FUck");
+            if let Err(why) = clone_perms("/system/bin", "/dev/upper") {
+                println!("rusty-magisk: Failed to clone perms of /system/bin into /dev/upper, trying to continue anyways: {}", why);
+            }
             match libmount::Overlay::writable(
                 ["/system/bin"].iter().map(|x| x.as_ref()),
                 "/dev/upper",
