@@ -3,15 +3,14 @@ use std::{
     fs,
     os::unix::{fs::PermissionsExt, process::CommandExt},
     path::{Path, PathBuf},
-    process::Command,
-    thread, time,
+    process, thread, time,
 };
 use sys_mount::{unmount, Mount, MountFlags, UnmountFlags};
 
 pub struct KernelFsMount();
 impl KernelFsMount {
     pub fn proc() {
-        if !Path::new("/proc/cpuinfo").exists() {
+        if !Path::new("/proc/cpuinfo").exists() && early_mode() {
             match Mount::new("/proc", "/proc", "proc", MountFlags::empty(), None) {
                 Ok(_) => {}
                 Err(why) => {
@@ -23,7 +22,7 @@ impl KernelFsMount {
     }
 
     pub fn dev() {
-        if dir_is_empty("/dev") {
+        if dir_is_empty("/dev") && early_mode() {
             match Mount::new("/dev", "/dev", "tmpfs", MountFlags::empty(), None) {
                 Ok(_) => {}
                 Err(why) => {
@@ -64,28 +63,34 @@ pub fn extract_file(extern_file: &str, intern_file: &'static [u8], extern_mode: 
 }
 
 pub fn switch_init() {
-    let init_real = "/init.real";
-    if Path::new(init_real).exists() {
-        // Unmount our /proc and /dev to ensure real android init doesn't panic
-        for fs in ["/dev", "/proc"].iter() {
-            // Verify fs in not empty before unmounting
-            if !dir_is_empty(fs) {
-                match unmount(fs, UnmountFlags::DETACH) {
-                    Ok(_) => {}
-                    Err(why) => {
-                        println!(
+    if early_mode() {
+        let init_real = "/init.real";
+        if Path::new(init_real).exists() {
+            // Unmount our /proc and /dev to ensure real android init doesn't panic
+            for fs in ["/dev", "/proc"].iter() {
+                // Verify fs in not empty before unmounting
+                if !dir_is_empty(fs) {
+                    match unmount(fs, UnmountFlags::DETACH) {
+                        Ok(_) => {}
+                        Err(why) => {
+                            println!(
                             "rusty-magisk: Failed to detach {}, trying to switch init anyway: {}",
                             fs, why
                         );
+                        }
                     }
                 }
             }
+            process::Command::new(init_real).exec();
+        } else {
+            println!(
+                "rusty-magisk: No init executable found to switch to ... im gonna panniccccc!!!"
+            );
+            thread::sleep(time::Duration::from_secs(5));
+            panic!("Once upon a time there lived ...");
         }
-        Command::new(init_real).exec();
     } else {
-        println!("rusty-magisk: No init executable found to switch to ... im gonna panniccccc!!!");
-        thread::sleep(time::Duration::from_secs(5));
-        panic!("Once upon a time there lived ...");
+        process::exit(0);
     }
 }
 
@@ -148,6 +153,14 @@ pub fn wipe_old_su() {
             }
         }
         */
+    }
+}
+
+pub fn early_mode() -> bool {
+    if Path::new("/android").exists() {
+        true
+    } else {
+        false
     }
 }
 

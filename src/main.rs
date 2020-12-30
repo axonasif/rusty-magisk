@@ -221,15 +221,17 @@ pub fn job() {
     // Extract magisk and set it up
     remount_root();
 
-    if Path::new("/").writable() {
-        extract_file(superuser_config, superuser_config_data, 0o750);
-    } else {
-        extract_file("/dev/su.rc", superuser_config_data, 0o750);
-        match libmount::BindMount::new("/dev/su.rc", superuser_config).mount() {
-            Ok(_) => {}
-            Err(_) => {
-                println!("rusty-magisk: Failed to mount superuser_config");
-                switch_init();
+    if Path::new("/lolman").exists() {
+        if Path::new("/").writable() {
+            extract_file(superuser_config, superuser_config_data, 0o750);
+        } else {
+            extract_file("/dev/su.rc", superuser_config_data, 0o750);
+            match libmount::BindMount::new("/dev/su.rc", superuser_config).mount() {
+                Ok(_) => {}
+                Err(_) => {
+                    println!("rusty-magisk: Failed to mount superuser_config");
+                    switch_init();
+                }
             }
         }
     }
