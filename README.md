@@ -1,4 +1,4 @@
-# Introduction
+# Introduction [![Rust Actions Status](https://github.com/AXIM0S/rusty-magisk/workflows/Rust/badge.svg)](https://github.com/AXIM0S/rusty-magisk/actions)
 
 This is my very first public `rust` project for fun purposes.
 
