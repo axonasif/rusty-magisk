@@ -4,8 +4,8 @@ use libmount;
 use std::{env, fs, os::unix::fs::symlink, path::Path, process::Command};
 use sys_mount::{Mount, MountFlags};
 use utils::{
-    chmod, clone_perms, dir_is_empty, extract_file, load_modfile, remount_root, switch_init,
-    wipe_old_su, KernelFsMount,
+    chmod, clone_perms, dir_is_empty, early_mode, extract_file, load_modfile, remount_root,
+    switch_init, wipe_old_su, KernelFsMount,
 };
 
 pub fn job() {
@@ -37,30 +37,24 @@ pub fn job() {
                 } else {
                     // When not empty
                     remount_root();
-                    match fs::write(format!("{}/{}", bin_dir, ".rwfs"), "") {
-                        Ok(_) => match fs::remove_file(format!("{}/{}", bin_dir, ".rwfs")) {
-                            Ok(_) => {}
-                            Err(_) => {}
-                        },
-                        Err(why) => {
-                            println!("rusty-magisk: {} is not writable: {}", bin_dir, why);
-                            switch_init();
-                        }
+                    if !Path::new(bin_dir).writable() {
+                        println!("rusty-magisk: {} is not writable", bin_dir);
+                        switch_init()
                     }
                 }
             } else {
                 match fs::create_dir(bin_dir) {
-                    Ok(_) => match Mount::new(bin_dir, bin_dir, "tmpfs", MountFlags::empty(), None)
-                    {
-                        Ok(_) => {}
-                        Err(why) => {
+                    Ok(_) => {
+                        if let Err(why) =
+                            Mount::new(bin_dir, bin_dir, "tmpfs", MountFlags::empty(), None)
+                        {
                             println!(
                                 "rusty-magisk: Failed to setup tmpfs at {}: {}",
                                 bin_dir, why
                             );
                             switch_init();
                         }
-                    },
+                    }
                     Err(why) => {
                         println!(
                             "rusty-magisk: Root(/) is not writable, failed to initialize {}: {}",
@@ -104,10 +98,9 @@ pub fn job() {
 
             // Create overlayfs runtime dirs
             for dir in ["/dev/upper", "/dev/work"].iter() {
-                match fs::create_dir_all(dir) {
-                    Ok(_) => {}
-                    Err(_) => {
-                        println!("rusty-magisk: Failed to setup devfs for overlay");
+                if let Err(why) = fs::create_dir_all(dir) {
+                    {
+                        println!("rusty-magisk: Failed to setup devfs for overlay: {}", why);
                         switch_init();
                     }
                 }
@@ -129,7 +122,7 @@ pub fn job() {
                     wipe_old_su();
                     extract_file("/dev/chmod", include_bytes!("asset/chmod"), 777);
                     for dir in ["/system/bin"].iter() {
-                        match Command::new("/dev/chmod").args(&["755", dir]).spawn() {
+                        match Command::new("/dev/chmod").args(&["755", dir]).status() {
                             Ok(_) => if let Ok(_) = fs::remove_file("/dev/chmod") {},
                             Err(why) => {
                                 println!(
@@ -186,11 +179,8 @@ pub fn job() {
     ];
 
     for dir in mirror_dir.iter() {
-        match fs::create_dir_all(dir) {
-            Ok(_) => {}
-            Err(why) => {
-                println!("rusty-magisk: Failed to create {} dir: {}", dir, why);
-            }
+        if let Err(why) = fs::create_dir_all(dir) {
+            println!("rusty-magisk: Failed to create {} dir: {}", dir, why);
         }
     }
 
@@ -198,20 +188,17 @@ pub fn job() {
     let mut mirror_count = 2;
 
     for mirror_source in ["/system", "/data"].iter() {
-        match Mount::new(
+        if let Err(why) = Mount::new(
             mirror_source,
             &mirror_dir[mirror_count],
             "",
             MountFlags::BIND,
             None,
         ) {
-            Ok(_) => {}
-            Err(why) => {
-                eprintln!(
-                    "rusty-magisk: Failed to bind mount {} into {}: {}",
-                    mirror_source, &mirror_dir[mirror_count], why
-                );
-            }
+            println!(
+                "rusty-magisk: Failed to bind mount {} into {}: {}",
+                mirror_source, &mirror_dir[mirror_count], why
+            );
         }
         mirror_count -= 1;
     }
@@ -221,37 +208,34 @@ pub fn job() {
     // Extract magisk and set it up
     remount_root();
 
-    if Path::new("/lolman").exists() {
+    if !early_mode() {
         if Path::new("/").writable() {
             extract_file(superuser_config, superuser_config_data, 0o750);
         } else {
             extract_file("/dev/su.rc", superuser_config_data, 0o750);
-            match libmount::BindMount::new("/dev/su.rc", superuser_config).mount() {
-                Ok(_) => {}
-                Err(_) => {
-                    println!("rusty-magisk: Failed to mount superuser_config");
-                    switch_init();
-                }
+            if let Err(why) = libmount::BindMount::new("/dev/su.rc", superuser_config).mount() {
+                println!("rusty-magisk: Failed to mount superuser_config: {}", why);
+                switch_init();
             }
         }
-    }
 
-    // Update magisk binary path
-    let new_superuser_config = match fs::read_to_string(superuser_config) {
-        Ok(ok_result) => ok_result,
-        Err(_) => {
-            println!("rusty-magisk: Failed to read new superuser_config");
-            switch_init();
-            String::from("")
-        }
-    };
-    match fs::write(
-        superuser_config,
-        new_superuser_config.replace("magisk_bin_path", &magisk_bin),
-    ) {
-        Ok(_) => {}
-        Err(_) => {
-            println!("rusty-magisk: Failed to write new superuser_config");
+        // Update magisk binary path
+        let new_superuser_config = match fs::read_to_string(superuser_config) {
+            Ok(ok_result) => ok_result,
+            Err(_) => {
+                println!("rusty-magisk: Failed to read new superuser_config");
+                switch_init();
+                String::from("")
+            }
+        };
+        if let Err(why) = fs::write(
+            superuser_config,
+            new_superuser_config.replace("magisk_bin_path", &magisk_bin),
+        ) {
+            println!(
+                "rusty-magisk: Failed to write new superuser_config: {}",
+                why
+            );
             switch_init();
         }
     }
@@ -263,15 +247,12 @@ pub fn job() {
     // Link magisk applets
     for file in ["su", "resetprop", "magiskhide", "magiskpolicy"].iter() {
         if !Path::new(&format!("{}/{}", bin_dir, file)).exists() {
-            match symlink(&magisk_bin, format!("{}/{}", bin_dir, file)) {
-                Ok(_) => {}
-                Err(why) => {
-                    println!(
-                        "rusty-magisk: Failed to create symlink for {}: {}",
-                        file, why
-                    );
-                    switch_init();
-                }
+            if let Err(why) = symlink(&magisk_bin, format!("{}/{}", bin_dir, file)) {
+                println!(
+                    "rusty-magisk: Failed to create symlink for {}: {}",
+                    file, why
+                );
+                switch_init();
             }
         }
     }
@@ -283,11 +264,8 @@ pub fn job() {
     ]
     .iter()
     {
-        match fs::create_dir_all(dir) {
-            Ok(_) => {}
-            Err(why) => {
-                println!("rusty-magisk: Failed to create {} dir: {}", dir, why);
-            }
+        if let Err(why) = fs::create_dir_all(dir) {
+            println!("rusty-magisk: Failed to create {} dir: {}", dir, why);
         }
     }
 
@@ -315,6 +293,26 @@ pub fn job() {
             0o755,
         );
     }
+
+    // Wipe old su binaries
+    wipe_old_su();
+
+    // Ensure /sbin is accessible globally
+    if bin_dir == "/sbin" {
+        chmod(bin_dir, 0o755);
+    }
+
+    /*
+    if Path::new("/sys/fs/selinux").exists() {
+        extract_file("/dev/magiskpolicy", include_bytes!("asset/magiskpolicy"), 0o755);
+        if let Err(_) = Command::new("/dev/magiskpolicy")
+            .args(&["--live", "--magisk"])
+            .status()
+        {
+            println!("rusty-magisk: Failed to execute magiskpolicy");
+        }
+    }
+    */
 
     //// Swtitch process to OS init.
     switch_init();

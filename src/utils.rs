@@ -1,6 +1,6 @@
 use likemod::errors;
 use std::{
-    fs,
+    env, fs,
     os::unix::{fs::PermissionsExt, process::CommandExt},
     path::{Path, PathBuf},
     process, thread, time,
@@ -11,39 +11,30 @@ pub struct KernelFsMount();
 impl KernelFsMount {
     pub fn proc() {
         if !Path::new("/proc/cpuinfo").exists() && early_mode() {
-            match Mount::new("/proc", "/proc", "proc", MountFlags::empty(), None) {
-                Ok(_) => {}
-                Err(why) => {
-                    println!("rusty-magisk: Failed to initialize procfs: {}", why);
-                    switch_init();
-                }
+            if let Err(why) = Mount::new("/proc", "/proc", "proc", MountFlags::empty(), None) {
+                println!("rusty-magisk: Failed to initialize procfs: {}", why);
+                switch_init();
             }
         }
     }
 
     pub fn dev() {
         if dir_is_empty("/dev") && early_mode() {
-            match Mount::new("/dev", "/dev", "tmpfs", MountFlags::empty(), None) {
-                Ok(_) => {}
-                Err(why) => {
-                    println!("rusty-magisk: Failed to setup devfs for overlay: {}", why);
-                    switch_init();
-                }
+            if let Err(why) = Mount::new("/dev", "/dev", "tmpfs", MountFlags::empty(), None) {
+                println!("rusty-magisk: Failed to setup devfs for overlay: {}", why);
+                switch_init();
             }
         }
     }
 }
 
 pub fn chmod(file: &str, mode: u32) {
-    match fs::set_permissions(file, fs::Permissions::from_mode(mode)) {
-        Ok(_) => {}
-        Err(why) => {
-            println!(
-                "rusty-magisk: Failed to chnage file mode to {} for {}: {}",
-                file, mode, why
-            );
-            switch_init();
-        }
+    if let Err(why) = fs::set_permissions(file, fs::Permissions::from_mode(mode)) {
+        println!(
+            "rusty-magisk: Failed to chnage file mode to {} for {}: {}",
+            file, mode, why
+        );
+        switch_init();
     }
 }
 
@@ -63,6 +54,12 @@ pub fn extract_file(extern_file: &str, intern_file: &'static [u8], extern_mode: 
 }
 
 pub fn switch_init() {
+    // Clean up stuff if needed
+    for file in ["/dev/chmod", "/dev/su.rc", "/dev/magiskpolicy"].iter() {
+        if Path::new(file).exists() {
+            fs::remove_file(file).ok();
+        }
+    }
     if early_mode() {
         let init_real = "/init.real";
         if Path::new(init_real).exists() {
@@ -70,14 +67,11 @@ pub fn switch_init() {
             for fs in ["/dev", "/proc"].iter() {
                 // Verify fs in not empty before unmounting
                 if !dir_is_empty(fs) {
-                    match unmount(fs, UnmountFlags::DETACH) {
-                        Ok(_) => {}
-                        Err(why) => {
-                            println!(
+                    if let Err(why) = unmount(fs, UnmountFlags::DETACH) {
+                        println!(
                             "rusty-magisk: Failed to detach {}, trying to switch init anyway: {}",
                             fs, why
                         );
-                        }
                     }
                 }
             }
@@ -133,15 +127,11 @@ pub fn clone_perms(source: &str, target: &str) -> std::io::Result<()> {
 pub fn wipe_old_su() {
     for su_bin in ["/system/bin/su", "/system/xbin/su"].iter() {
         if Path::new(su_bin).exists() {
-            match fs::remove_file(su_bin) {
-                Ok(_) => {}
-
-                Err(why) => {
-                    println!(
-                        "rusty-magisk: Failed to remove existing {} binary: {}",
-                        su_bin, why
-                    );
-                }
+            if let Err(why) = fs::remove_file(su_bin) {
+                println!(
+                    "rusty-magisk: Failed to remove existing {} binary: {}",
+                    su_bin, why
+                );
             }
         }
 
@@ -157,7 +147,7 @@ pub fn wipe_old_su() {
 }
 
 pub fn early_mode() -> bool {
-    if Path::new("/android").exists() {
+    if env::var("ANDROID_BOOTLOGO").is_err() {
         true
     } else {
         false

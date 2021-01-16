@@ -1,0 +1,16 @@
+on early-init
+    export PATH /sbin:/bin:/system/bin:/system/xbin:/system/vendor/bin:/gearlock/bin:/apex/com.android.runtime/bin:/apex/com.android.art/bin
+
+service su_daemon /sbin/magisk --daemon
+    seclabel u:r:su:s0
+    oneshot
+
+on boot
+    exec u:r:su:s0 -- /rusty-magisk
+    start su_daemon
+    exec u:r:su:s0 -- /sbin/magisk --post-fs-data
+
+on property:sys.boot_completed=1
+    exec u:r:su:s0 -- /sbin/magisk --service
+    exec u:r:su:s0 -- /sbin/magisk --boot-complete
+
