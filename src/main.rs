@@ -158,11 +158,14 @@ pub fn job() {
         }
     };
 
+    let magisk_apk = "/data/magisk.apk";
+    let magisk_apk_local = "/data/.rusty-magisk/magisk.apk";
     let magisk_config = format!("{}/{}", bin_dir, ".magisk/config");
-    let magisk_apk_dir = "/system/priv-app/MagiskSu";
-
+    //let magisk_apk_dir = "/system/priv-app/MagiskSu";
+    let pkgs_list = "/data/system/packages.list";
     let magisk_bin = format!("{}/{}", bin_dir, "magisk");
     //let magisk_su_bin = format!("{}/{}", bin_dir, "su");
+    let magisk_bin_local = "/data/.rusty-magisk/magisk";
     let magisk_bin_data: &'static [u8] = {
         if Path::new("/system/lib64").exists() {
             include_bytes!("asset/magisk64")
@@ -242,7 +245,17 @@ pub fn job() {
 
     // Extract the remaining stuff
     extract_file(&magisk_config, include_bytes!("config/magisk"), 0o755);
-    extract_file(&magisk_bin, magisk_bin_data, 0o755);
+    if Path::new(magisk_bin_local).exists() {
+        if let Err(why) = fs::copy(magisk_bin_local, &magisk_bin) {
+            println!(
+                "rusty-magisk: Failed to copy {} into {}: {}",
+                magisk_bin_local, magisk_bin, why
+            );
+            switch_init()
+        }
+    } else {
+        extract_file(&magisk_bin, magisk_bin_data, 0o755);
+    }
 
     // Link magisk applets
     for file in ["su", "resetprop", "magiskhide", "magiskpolicy"].iter() {
@@ -270,28 +283,24 @@ pub fn job() {
     }
 
     // Install magiskMan into system if missing
-    if Path::new("/").writable() {
-        if !Path::new(magisk_apk_dir).exists() {
-            match fs::create_dir_all(magisk_apk_dir) {
-                Ok(_) => {
-                    chmod(magisk_apk_dir, 0o755);
-                    extract_file(
-                        &format!("{}{}", magisk_apk_dir, "/MagiskSu.apk"),
-                        include_bytes!("asset/magisk.apk"),
-                        0o644,
-                    );
-                }
-                Err(why) => {
-                    println!("rusty-magisk: Failed to create MagiskApkDir dir: {}", why);
-                }
-            }
+    let pkgs_list = match fs::read_to_string(pkgs_list) {
+        Ok(ans) => String::from(ans),
+        Err(_) => {
+            println!("rusty-magisk: Failed to read {}", pkgs_list);
+            String::from("")
         }
-    } else {
-        extract_file(
-            "/data/magisk.apk",
-            include_bytes!("asset/magisk.apk"),
-            0o755,
-        );
+    };
+    if !String::from(pkgs_list).contains("com.topjohnwu.magisk") {
+        if Path::new(magisk_apk_local).exists() {
+            if let Err(why) = fs::copy(magisk_apk_local, magisk_apk_local) {
+                println!(
+                    "rusty-magisk: Failed to copy {} to {}: {}",
+                    magisk_apk_local, magisk_apk, why
+                )
+            }
+        } else {
+            extract_file(magisk_apk, include_bytes!("asset/magisk.apk"), 0o755);
+        }
     }
 
     // Wipe old su binaries
