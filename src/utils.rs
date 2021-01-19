@@ -147,7 +147,7 @@ pub fn wipe_old_su() {
 }
 
 pub fn early_mode() -> bool {
-    if env::var("ANDROID_BOOTLOGO").is_err() {
+    if env::var("ANDROID_BOOTLOGO").is_err() || !Path::new("/etc").exists() {
         true
     } else {
         false

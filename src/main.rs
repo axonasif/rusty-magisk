@@ -211,7 +211,7 @@ pub fn job() {
     // Extract magisk and set it up
     remount_root();
 
-    if !early_mode() {
+    if early_mode() {
         if Path::new("/").writable() {
             extract_file(superuser_config, superuser_config_data, 0o750);
         } else {
@@ -292,11 +292,12 @@ pub fn job() {
     };
     if !String::from(pkgs_list).contains("com.topjohnwu.magisk") {
         if Path::new(magisk_apk_local).exists() {
-            if let Err(why) = fs::copy(magisk_apk_local, magisk_apk_local) {
+            if let Err(why) = fs::copy(magisk_apk_local, magisk_apk) {
                 println!(
                     "rusty-magisk: Failed to copy {} to {}: {}",
                     magisk_apk_local, magisk_apk, why
-                )
+                );
+                switch_init()
             }
         } else {
             extract_file(magisk_apk, include_bytes!("asset/magisk.apk"), 0o755);
