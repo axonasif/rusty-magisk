@@ -5,7 +5,7 @@ use std::{env, fs, os::unix::fs::symlink, path::Path, process::Command};
 use sys_mount::{Mount, MountFlags};
 use utils::{
     chmod, clone_perms, dir_is_empty, early_mode, extract_file, load_modfile, remount_root,
-    switch_init, wipe_old_su, KernelFsMount,
+    switch_init, KernelFsMount,
 };
 
 pub fn job() {
@@ -119,7 +119,6 @@ pub fn job() {
             .mount()
             {
                 Ok(_) => {
-                    wipe_old_su();
                     extract_file("/dev/chmod", include_bytes!("asset/chmod"), 777);
                     for dir in ["/system/bin"].iter() {
                         match Command::new("/dev/chmod").args(&["755", dir]).status() {
@@ -304,8 +303,21 @@ pub fn job() {
         }
     }
 
-    // Wipe old su binaries
-    wipe_old_su();
+    // Own pre-existing su binaries
+    if bin_dir == "/sbin" {
+        for su_bin in ["/system/bin/su", "/system/xbin/su"].iter() {
+            if Path::new(su_bin).exists() {
+                if let Err(why) =
+                    libmount::BindMount::new(format!("{}/{}", bin_dir, "su"), su_bin).mount()
+                {
+                    println!(
+                        "rusty-magisk: Failed to bind mount {} into {}: {}",
+                        bin_dir, su_bin, why
+                    );
+                }
+            }
+        }
+    }
 
     // Ensure /sbin is accessible globally
     if bin_dir == "/sbin" {

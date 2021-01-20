@@ -124,28 +124,6 @@ pub fn clone_perms(source: &str, target: &str) -> std::io::Result<()> {
     Ok(())
 }
 
-pub fn wipe_old_su() {
-    for su_bin in ["/system/bin/su", "/system/xbin/su"].iter() {
-        if Path::new(su_bin).exists() {
-            if let Err(why) = fs::remove_file(su_bin) {
-                println!(
-                    "rusty-magisk: Failed to remove existing {} binary: {}",
-                    su_bin, why
-                );
-            }
-        }
-
-        /*
-        match symlink("/sbin/su", su_bin) {
-            Ok(_) => {}
-            Err(why) => {
-                println!("rusty-magisk: Failed to symlink for {}: {}", su_bin, why);
-            }
-        }
-        */
-    }
-}
-
 pub fn early_mode() -> bool {
     if env::var("ANDROID_BOOTLOGO").is_err() || !Path::new("/etc").exists() {
         true
