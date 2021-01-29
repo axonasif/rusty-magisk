@@ -16,7 +16,12 @@ jobs:
 
     steps:
     - uses: actions/checkout@v2
-    
+
+    - name: Create changelog
+      uses: AXIM0S/auto-changelog@v1.1.0
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+      
     - name: Install x86_64-unknown-linux-musl
       uses: actions-rs/toolchain@v1
       with:
@@ -33,11 +38,6 @@ jobs:
     
     - name: Build x86_64
       run: RUSTFLAGS='-C link-arg=-s' cargo build --release --target x86_64-unknown-linux-musl
-      
-    - name: Create changelog
-      uses: AXIM0S/auto-changelog@v1.1.0
-      with:
-        token: ${{ secrets.GITHUB_TOKEN }}
       
     - name: Build i686
       run: RUSTFLAGS='-C link-arg=-s' cargo build --release --target i686-unknown-linux-musl
