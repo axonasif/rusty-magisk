@@ -7,7 +7,10 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+chrono = "0.4.19"
 sys-mount = "1.2.1"
 likemod = "0.2.0"
 libmount = "0.1.15"
 faccess = "0.2.3"
+log = "0.4.14"
+env_logger = "0.8.2"

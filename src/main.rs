@@ -1,7 +1,10 @@
 mod utils;
+use chrono::Local;
+use env_logger::Builder;
 use faccess::PathExt;
 use libmount;
-use std::{env, fs, os::unix::fs::symlink, path::Path, process::Command};
+use log::{error, warn, LevelFilter};
+use std::{env, fs, io::Write, os::unix::fs::symlink, path::Path, process::Command};
 use sys_mount::{Mount, MountFlags};
 use utils::{
     chmod, clone_perms, dir_is_empty, early_mode, extract_file, load_modfile, remount_root,
@@ -27,10 +30,7 @@ pub fn job() {
                     match Mount::new(bin_dir, bin_dir, "tmpfs", MountFlags::empty(), None) {
                         Ok(_) => {}
                         Err(why) => {
-                            println!(
-                                "rusty-magisk: Failed to setup tmpfs at {}: {}",
-                                bin_dir, why
-                            );
+                            error!("Failed to setup tmpfs at {}: {}", bin_dir, why);
                             switch_init();
                         }
                     }
@@ -38,7 +38,7 @@ pub fn job() {
                     // When not empty
                     remount_root();
                     if !Path::new(bin_dir).writable() {
-                        println!("rusty-magisk: {} is not writable", bin_dir);
+                        error!("{} is not writable", bin_dir);
                         switch_init()
                     }
                 }
@@ -48,16 +48,13 @@ pub fn job() {
                         if let Err(why) =
                             Mount::new(bin_dir, bin_dir, "tmpfs", MountFlags::empty(), None)
                         {
-                            println!(
-                                "rusty-magisk: Failed to setup tmpfs at {}: {}",
-                                bin_dir, why
-                            );
+                            error!("Failed to setup tmpfs at {}: {}", bin_dir, why);
                             switch_init();
                         }
                     }
                     Err(why) => {
-                        println!(
-                            "rusty-magisk: Root(/) is not writable, failed to initialize {}: {}",
+                        error!(
+                            "Root(/) is not writable, failed to initialize {}: {}",
                             bin_dir, why
                         );
                         switch_init();
@@ -87,12 +84,9 @@ pub fn job() {
                     "/system/lib/modules/{}/kernel/fs/{}",
                     kernel_release, module
                 );
-                match load_modfile(&mod_path) {
-                    Ok(_) => {}
-                    Err(_) => {
-                        println!("rusty-magisk: Failed to load overlay kernel modules");
-                        switch_init();
-                    }
+                if let Err(_) = load_modfile(&mod_path) {
+                    error!("Failed to load overlay kernel modules");
+                    switch_init();
                 }
             }
 
@@ -100,7 +94,7 @@ pub fn job() {
             for dir in ["/dev/upper", "/dev/work"].iter() {
                 if let Err(why) = fs::create_dir_all(dir) {
                     {
-                        println!("rusty-magisk: Failed to setup devfs for overlay: {}", why);
+                        error!("Failed to setup devfs for overlay: {}", why);
                         switch_init();
                     }
                 }
@@ -108,7 +102,7 @@ pub fn job() {
 
             // Setup overlayfs
             if let Err(why) = clone_perms("/system/bin", "/dev/upper") {
-                println!("rusty-magisk: Failed to clone perms of /system/bin into /dev/upper, trying to continue anyways: {}", why);
+                warn!("Failed to clone perms of /system/bin into /dev/upper, trying to continue anyways: {}", why);
             }
             match libmount::Overlay::writable(
                 ["/system/bin"].iter().map(|x| x.as_ref()),
@@ -124,16 +118,13 @@ pub fn job() {
                         match Command::new("/dev/chmod").args(&["755", dir]).status() {
                             Ok(_) => if let Ok(_) = fs::remove_file("/dev/chmod") {},
                             Err(why) => {
-                                println!(
-                                    "rusty-magisk: Failed to chnage modes on {}: {}",
-                                    dir, why
-                                );
+                                error!("Failed to chnage modes on {}: {}", dir, why);
                             }
                         }
                     }
                 }
                 Err(_) => {
-                    println!("rusty-magisk: Failed to mount overlayfs at /system/bin");
+                    error!("Failed to mount overlayfs at /system/bin");
                     switch_init();
                 }
             }
@@ -182,7 +173,7 @@ pub fn job() {
 
     for dir in mirror_dir.iter() {
         if let Err(why) = fs::create_dir_all(dir) {
-            println!("rusty-magisk: Failed to create {} dir: {}", dir, why);
+            error!("Failed to create {} dir: {}", dir, why);
         }
     }
 
@@ -197,8 +188,8 @@ pub fn job() {
             MountFlags::BIND,
             None,
         ) {
-            println!(
-                "rusty-magisk: Failed to bind mount {} into {}: {}",
+            error!(
+                "Failed to bind mount {} into {}: {}",
                 mirror_source, &mirror_dir[mirror_count], why
             );
         }
@@ -216,7 +207,7 @@ pub fn job() {
         } else {
             extract_file("/dev/su.rc", superuser_config_data, 0o750);
             if let Err(why) = libmount::BindMount::new("/dev/su.rc", superuser_config).mount() {
-                println!("rusty-magisk: Failed to mount superuser_config: {}", why);
+                error!("Failed to mount superuser_config: {}", why);
                 switch_init();
             }
         }
@@ -225,7 +216,7 @@ pub fn job() {
         let new_superuser_config = match fs::read_to_string(superuser_config) {
             Ok(ok_result) => ok_result,
             Err(_) => {
-                println!("rusty-magisk: Failed to read new superuser_config");
+                error!("Failed to read new superuser_config");
                 switch_init();
                 String::from("")
             }
@@ -234,10 +225,7 @@ pub fn job() {
             superuser_config,
             new_superuser_config.replace("magisk_bin_path", &magisk_bin),
         ) {
-            println!(
-                "rusty-magisk: Failed to write new superuser_config: {}",
-                why
-            );
+            error!("Failed to write new superuser_config: {}", why);
             switch_init();
         }
     }
@@ -246,8 +234,8 @@ pub fn job() {
     extract_file(&magisk_config, include_bytes!("config/magisk"), 0o755);
     if Path::new(magisk_bin_local).exists() {
         if let Err(why) = fs::copy(magisk_bin_local, &magisk_bin) {
-            println!(
-                "rusty-magisk: Failed to copy {} into {}: {}",
+            error!(
+                "Failed to copy {} into {}: {}",
                 magisk_bin_local, magisk_bin, why
             );
             switch_init()
@@ -260,10 +248,7 @@ pub fn job() {
     for file in ["su", "resetprop", "magiskhide", "magiskpolicy"].iter() {
         if !Path::new(&format!("{}/{}", bin_dir, file)).exists() {
             if let Err(why) = symlink(&magisk_bin, format!("{}/{}", bin_dir, file)) {
-                println!(
-                    "rusty-magisk: Failed to create symlink for {}: {}",
-                    file, why
-                );
+                error!("Failed to create symlink for {}: {}", file, why);
                 switch_init();
             }
         }
@@ -277,7 +262,7 @@ pub fn job() {
     .iter()
     {
         if let Err(why) = fs::create_dir_all(dir) {
-            println!("rusty-magisk: Failed to create {} dir: {}", dir, why);
+            error!("Failed to create {} dir: {}", dir, why);
         }
     }
 
@@ -285,15 +270,15 @@ pub fn job() {
     let pkgs_list = match fs::read_to_string(pkgs_list) {
         Ok(ans) => String::from(ans),
         Err(_) => {
-            println!("rusty-magisk: Failed to read {}", pkgs_list);
+            error!("Failed to read {}", pkgs_list);
             String::from("")
         }
     };
     if !String::from(pkgs_list).contains("com.topjohnwu.magisk") {
         if Path::new(magisk_apk_local).exists() {
             if let Err(why) = fs::copy(magisk_apk_local, magisk_apk) {
-                println!(
-                    "rusty-magisk: Failed to copy {} to {}: {}",
+                error!(
+                    "Failed to copy {} to {}: {}",
                     magisk_apk_local, magisk_apk, why
                 );
                 switch_init()
@@ -310,17 +295,11 @@ pub fn job() {
                 if let Err(why) =
                     libmount::BindMount::new(format!("{}/{}", bin_dir, "su"), su_bin).mount()
                 {
-                    println!(
-                        "rusty-magisk: Failed to bind mount {} into {}: {}",
-                        bin_dir, su_bin, why
-                    );
+                    error!("Failed to bind mount {} into {}: {}", bin_dir, su_bin, why);
                 }
             }
         }
-    }
-
-    // Ensure /sbin is accessible globally
-    if bin_dir == "/sbin" {
+        // Ensure /sbin is accessible globally
         chmod(bin_dir, 0o755);
     }
 
@@ -331,7 +310,7 @@ pub fn job() {
             .args(&["--live", "--magisk"])
             .status()
         {
-            println!("rusty-magisk: Failed to execute magiskpolicy");
+            error!("Failed to execute magiskpolicy");
         }
     }
     */
@@ -340,6 +319,33 @@ pub fn job() {
     switch_init();
 }
 
+pub fn init_logger() {
+    let mut builder = Builder::new();
+
+    builder.format(|formatter, record| {
+        writeln!(
+            formatter,
+            "{} [{}] ({}): {}",
+            Local::now().format("%Y-%m-%d %H:%M:%S"),
+            record.level(),
+            record.target(),
+            record.args()
+        )
+    });
+
+    if let Ok(var) = env::var("RUST_LOG") {
+        builder.parse_filters(&var);
+    } else {
+        // if no RUST_LOG provided, default to logging at the Info level
+        builder.filter(None, LevelFilter::Info);
+        // Filter extraneous html5ever not-implemented messages
+        builder.filter(Some("html5ever"), LevelFilter::Error);
+    }
+
+    builder.init();
+}
+
 fn main() {
+    init_logger();
     job();
 }

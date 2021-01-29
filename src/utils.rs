@@ -1,4 +1,5 @@
 use likemod::errors;
+use log::{error, warn};
 use std::{
     env, fs,
     os::unix::{fs::PermissionsExt, process::CommandExt},
@@ -12,7 +13,7 @@ impl KernelFsMount {
     pub fn proc() {
         if !Path::new("/proc/cpuinfo").exists() && early_mode() {
             if let Err(why) = Mount::new("/proc", "/proc", "proc", MountFlags::empty(), None) {
-                println!("rusty-magisk: Failed to initialize procfs: {}", why);
+                error!("Failed to initialize procfs: {}", why);
                 switch_init();
             }
         }
@@ -21,7 +22,7 @@ impl KernelFsMount {
     pub fn dev() {
         if dir_is_empty("/dev") && early_mode() {
             if let Err(why) = Mount::new("/dev", "/dev", "tmpfs", MountFlags::empty(), None) {
-                println!("rusty-magisk: Failed to setup devfs for overlay: {}", why);
+                error!("Failed to setup devfs for overlay: {}", why);
                 switch_init();
             }
         }
@@ -30,8 +31,8 @@ impl KernelFsMount {
 
 pub fn chmod(file: &str, mode: u32) {
     if let Err(why) = fs::set_permissions(file, fs::Permissions::from_mode(mode)) {
-        println!(
-            "rusty-magisk: Failed to chnage file mode to {} for {}: {}",
+        error!(
+            "Failed to chnage file mode to {} for {}: {}",
             file, mode, why
         );
         switch_init();
@@ -44,10 +45,7 @@ pub fn extract_file(extern_file: &str, intern_file: &'static [u8], extern_mode: 
             chmod(extern_file, extern_mode);
         }
         Err(why) => {
-            println!(
-                "rusty-magisk: Failed to write {} file: {}",
-                extern_file, why
-            );
+            error!("Failed to write {} file: {}", extern_file, why);
             switch_init();
         }
     }
@@ -68,8 +66,8 @@ pub fn switch_init() {
                 // Verify fs in not empty before unmounting
                 if !dir_is_empty(fs) {
                     if let Err(why) = unmount(fs, UnmountFlags::DETACH) {
-                        println!(
-                            "rusty-magisk: Failed to detach {}, trying to switch init anyway: {}",
+                        warn!(
+                            "Failed to detach {}, trying to switch init anyway: {}",
                             fs, why
                         );
                     }
@@ -77,9 +75,7 @@ pub fn switch_init() {
             }
             process::Command::new(init_real).exec();
         } else {
-            println!(
-                "rusty-magisk: No init executable found to switch to ... im gonna panniccccc!!!"
-            );
+            warn!("No init executable found to switch to ... im gonna panniccccc!!!");
             thread::sleep(time::Duration::from_secs(5));
             panic!("Once upon a time there lived ...");
         }
@@ -158,7 +154,7 @@ pub fn mount(my_args: &[&str]) {
     Command::new(mount_prog)
         .args(my_args)
         .spawn()
-        .expect("rusty-magisk: ");
+        .expect("");
 }
 
 */
@@ -179,7 +175,7 @@ pub fn mount(source_file: &str, target_file: &str) {
             // let mount = _mount.into_unmount_drop(UnmountFlags::DETACH);
         }
         Err(why) => {
-            println!("rusty-magisk: Failed to mount device: {}", why);
+            error!("Failed to mount device: {}", why);
             exit(1);
         }
     }
@@ -203,7 +199,7 @@ pub fn run_externc(
 
     if let Some(exit_code) = command.execute().unwrap() {
         if exit_code != 0 {
-            println!("{}", err_msg);
+            error!("{}", err_msg);
             exit(exit_code);
         }
     }
