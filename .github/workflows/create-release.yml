@@ -21,8 +21,13 @@ jobs:
       uses: AXIM0S/auto-changelog@v1.1.0
       with:
         token: ${{ secrets.GITHUB_TOKEN }}
+      id: my_changelog
+
     - name: lol
-      run: ls -l
+      run: |
+        echo ${{ steps.my_changelog.outputs.changelog }}" >> ./CHANGELOG.md
+        ls -l
+        cat CHANGE*
       
     - name: Install x86_64-unknown-linux-musl
       uses: actions-rs/toolchain@v1
