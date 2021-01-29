@@ -21,6 +21,8 @@ jobs:
       uses: AXIM0S/auto-changelog@v1.1.0
       with:
         token: ${{ secrets.GITHUB_TOKEN }}
+    - name: lol
+      run: ls -l
       
     - name: Install x86_64-unknown-linux-musl
       uses: actions-rs/toolchain@v1
