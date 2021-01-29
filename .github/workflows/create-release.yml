@@ -17,17 +17,15 @@ jobs:
     steps:
     - uses: actions/checkout@v2
 
-    - name: Create changelog
+    - name: Gen changelog
       uses: AXIM0S/auto-changelog@v1.1.0
       with:
         token: ${{ secrets.GITHUB_TOKEN }}
       id: my_changelog
 
-    - name: lol
+    - name: Create changelog
       run: |
-        echo "${{ steps.my_changelog.outputs.changelog }}" >> ./CHANGELOG.md
-        ls -l
-        cat CHANGE*
+        echo "${{ steps.my_changelog.outputs.changelog }}" > ./CHANGELOG.md
       
     - name: Install x86_64-unknown-linux-musl
       uses: actions-rs/toolchain@v1
