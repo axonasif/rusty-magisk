@@ -1,3 +1,0 @@
-[target.x86_64-linux-android]
-runner = "/media/axon/Devel/WorkStation/gearlock-utils/makeMe/_cache/android-r21d-api-24-v3/bin/x86_64-linux-android-ar"
-linker = "/media/axon/Devel/WorkStation/gearlock-utils/makeMe/_cache/android-r21d-api-24-v3/bin/x86_64-linux-android-clang" 

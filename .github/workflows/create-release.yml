@@ -1,0 +1,48 @@
+name: Release assets
+
+on:
+  push:
+    tags:
+    - 'v*'
+  workflow_dispatch:
+  
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+    
+    - name: Build x86_64
+      run: RUSTFLAGS='-C link-arg=-s' cargo build --release --target x86_64-unknown-linux-musl
+      
+    - name: Create CHANGELOG
+      uses: ardalanamini/auto-changelog@v1.1.0
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        output: ./CHANGELOG.md
+      
+    - name: Build i686
+      run: RUSTFLAGS='-C link-arg=-s' cargo build --release --target i686-unknown-linux-musl
+      
+    - name: Rename artifacts
+      run: |
+         mv target/x86_64-unknown-linux-musl/release/rusty-magisk target/x86_64-unknown-linux-musl/release/rusty-magisk_x86_64
+         mv target/i686-unknown-linux-musl/release/rusty-magisk target/i686-unknown-linux-musl/release/rusty-magisk_x86
+      
+    - name: Release artifacts
+      uses: docker://antonyurchenko/git-release:latest
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        DRAFT_RELEASE: "true"
+        PRE_RELEASE: "false"
+        CHANGELOG_FILE: "CHANGELOG.md"
+        ALLOW_EMPTY_CHANGELOG: "true"
+        ALLOW_TAG_PREFIX: "true"
+      with:
+        args: |
+            target/*-unknown-linux-musl/release/rusty-magisk*
