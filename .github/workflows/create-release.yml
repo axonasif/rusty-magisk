@@ -35,11 +35,9 @@ jobs:
       run: RUSTFLAGS='-C link-arg=-s' cargo build --release --target x86_64-unknown-linux-musl
       
     - name: Create changelog
-      uses: saadmk11/changelog-ci@v0.7.0
+      uses: AXIM0S/auto-changelog@v1.1.0
       with:
-        changelog_filename: CHANGELOG.md
-      env:
-        GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
+        token: ${{ secrets.GITHUB_TOKEN }}
       
     - name: Build i686
       run: RUSTFLAGS='-C link-arg=-s' cargo build --release --target i686-unknown-linux-musl
