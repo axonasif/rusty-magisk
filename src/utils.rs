@@ -73,7 +73,10 @@ pub fn switch_init() {
                     }
                 }
             }
-            process::Command::new(init_real).exec();
+            libmount::BindMount::new(init_real, "/init")
+                .mount()
+                .unwrap();
+            process::Command::new("/init").exec();
         } else {
             warn!("No init executable found to switch to ... im gonna panniccccc!!!");
             thread::sleep(time::Duration::from_secs(5));
