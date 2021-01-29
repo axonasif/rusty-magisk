@@ -25,7 +25,7 @@ jobs:
 
     - name: lol
       run: |
-        echo ${{ steps.my_changelog.outputs.changelog }}" >> ./CHANGELOG.md
+        echo "${{ steps.my_changelog.outputs.changelog }}" >> ./CHANGELOG.md
         ls -l
         cat CHANGE*
       
