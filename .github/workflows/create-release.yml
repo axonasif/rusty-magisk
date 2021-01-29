@@ -17,6 +17,12 @@ jobs:
     steps:
     - uses: actions/checkout@v2
     
+    - name: Install targets
+      uses: actions-rs/toolchain@v1
+      with:
+          target: x86_64-unknown-linux-musl, i686-unknown-linux-musl
+          override: true
+    
     - name: Build x86_64
       run: RUSTFLAGS='-C link-arg=-s' cargo build --release --target x86_64-unknown-linux-musl
       
