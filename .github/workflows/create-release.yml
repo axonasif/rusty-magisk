@@ -16,15 +16,33 @@ jobs:
 
     steps:
     - uses: actions/checkout@v2
+
+    - name: Gen changelog
+      uses: AXIM0S/auto-changelog@v1.1.0
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+      id: my_changelog
+
+    - name: Create changelog
+      run: |
+        echo "${{ steps.my_changelog.outputs.changelog }}" > ./CHANGELOG.md
+      
+    - name: Install x86_64-unknown-linux-musl
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        target: x86_64-unknown-linux-musl
+        override: true
+    
+    - name: Install i686-unknown-linux-musl
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        target: i686-unknown-linux-musl
+        override: true
     
     - name: Build x86_64
       run: RUSTFLAGS='-C link-arg=-s' cargo build --release --target x86_64-unknown-linux-musl
-      
-    - name: Create CHANGELOG
-      uses: ardalanamini/auto-changelog@v1.1.0
-      with:
-        token: ${{ secrets.GITHUB_TOKEN }}
-        output: ./CHANGELOG.md
       
     - name: Build i686
       run: RUSTFLAGS='-C link-arg=-s' cargo build --release --target i686-unknown-linux-musl
