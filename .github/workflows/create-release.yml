@@ -4,7 +4,6 @@ on:
   push:
     tags:
     - 'v*'
-  workflow_dispatch:
   
 env:
   CARGO_TERM_COLOR: always
@@ -24,8 +23,7 @@ jobs:
       id: my_changelog
 
     - name: Create changelog
-      run: |
-        echo "${{ steps.my_changelog.outputs.changelog }}" > ./CHANGELOG.md
+      run: echo -e "${{ steps.my_changelog.outputs.changelog }}\n" >> ./CHANGELOG.md
       
     - name: Install x86_64-unknown-linux-musl
       uses: actions-rs/toolchain@v1
@@ -63,4 +61,4 @@ jobs:
         ALLOW_TAG_PREFIX: "true"
       with:
         args: |
-            target/*-unknown-linux-musl/release/rusty-magisk*
+            target/*-unknown-linux-musl/release/rusty-magisk_*
