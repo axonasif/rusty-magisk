@@ -1,4 +1,4 @@
-# Introduction [![Rust Actions Status](https://github.com/AXIM0S/rusty-magisk/workflows/Rust/badge.svg)](https://github.com/AXIM0S/rusty-magisk/actions)
+# Introduction [![Rust Actions Status](https://github.com/AXIM0S/rusty-magisk/workflows/Rust/badge.svg)](https://github.com/AXIM0S/rusty-magisk/actions) ![GitHub all releases](https://img.shields.io/github/downloads/AXIM0S/rusty-magisk/total)
 
 This is my very first public `rust` project for fun purposes.
 
@@ -68,3 +68,4 @@ rsync rusty-magisk ramdisk/init && chmod 777 ramdisk/init && ( cd ramdisk && fin
 > I'm assuming that you have `rusty-magisk` binary at the same dir as your android-x86 OS files.
 >
 > Quick-tip: You can also get pre-built `rusty-magisk` binaries at https://github.com/AXIM0S/rusty-magisk/releases
+>          : Rusty-Magisk can be easily installed from [GearLock](https://supreme-gamers.com/r/gearlock-custom-recovery-replacement-for-android-x86.40).
