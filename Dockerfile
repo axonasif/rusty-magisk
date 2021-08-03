@@ -32,6 +32,6 @@ CMD cp /image /image.bak \
     && chmod a+x /ramdisk/init \
     && touch /image \
     && cd /ramdisk \
-    && find . /ramdisk | cpio -o -H newc | sudo gzip > /image \
+    && find . | cpio -o -H newc | gzip > /image \
     && echo "Success." ; } \
     || echo "Failed."
