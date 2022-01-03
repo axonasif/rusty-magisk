@@ -1,14 +1,28 @@
 on early-init
     export PATH /sbin:/bin:/system/bin:/system/xbin:/system/vendor/bin:/gearlock/bin:/apex/com.android.runtime/bin:/apex/com.android.art/bin
     
-service su_daemon magisk_bin_path --daemon
-    seclabel u:r:su:s0
+
+on post-fs-data
+    start logd
+    start adbd
+    rm /dev/.magisk_unblock
+    start FAhW7H9G5sf
+    # wait until all magisk post-fs-data processes are done, such as post-fs-data.sh script, modules.
+    wait /dev/.magisk_unblock 40
+    rm /dev/.magisk_unblock
+
+service FAhW7H9G5sf magisk_bin_path --post-fs-data
+    user root
+    seclabel u:r:magisk:s0
     oneshot
-
-on boot
-    start su_daemon
-    exec u:r:su:s0 -- magisk_bin_path --post-fs-data
-
+service HLiFsR1HtIXVN6 magisk_bin_path --service
+    class late_start
+    user root
+    seclabel u:r:magisk:s0
+    oneshot
 on property:sys.boot_completed=1
-    exec u:r:su:s0 -- magisk_bin_path --service
-    exec u:r:su:s0 -- magisk_bin_path --boot-complete
+    start YqCTLTppv3ML
+service YqCTLTppv3ML magisk_bin_path --boot-complete
+    user root
+    seclabel u:r:magisk:s0
+    oneshot"
